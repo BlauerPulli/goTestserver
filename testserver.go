@@ -12,13 +12,30 @@ import (
 )
 
 const (
-	DB_USER     = "postgres"
-	DB_PASSWORD = "postgres"
-	DB_NAME     = "postgres"
+	host		= "127.0.0.1"
+	port		= "5432"
+	user		= "postgres"
+	password	= "postgres"
+	dbname		= "postgres"
 )
 
+func createTable(w http.ResponseWriter, r *http.Request) {
+	if checkRequestMethod(r.Method, "GET") {
+		db, err := openDB()
+		if noErr(err) {
+			fmt.Printf("Creating Table..\n")
+			_, err = db.Exec("CREATE TABLE IF NOT EXISTS test(ID SERIAL UNIQUE PRIMARY KEY, " +
+				"spalte1 VARCHAR (30) NOT NULL, spalte2 VARCHAR(30) NOT NULL, spalte3 VARCHAR(30) NOT NULL);")
+			if noErr(err) {
+				fmt.Printf("Table created\n")
+			}
+		}
+		closeDB(db)
+	}
+}
+
 func availableImages(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
+	if checkRequestMethod(r.Method, "GET") {
 		cmd := exec.Command("docker", "images")
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -29,89 +46,64 @@ func availableImages(w http.ResponseWriter, r *http.Request) {
 		}
 		outStr, errStr := string(stdout.Bytes()), string(stderr.Bytes())
 		fmt.Printf("out:\n%s\nerr:\n%s\n", outStr, errStr)
-	} else {
-		err := "Wrong request method!"
-		fmt.Printf("Request failed with %s\n", err)
 	}
 }
 
 func insertDbEntry(w http.ResponseWriter, r *http.Request) {
-	dbinfo := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable",
-		DB_USER, DB_PASSWORD, DB_NAME)
-	db, err := sql.Open("postgres", dbinfo)
-	checkErr(err)
-	defer db.Close()
-	fmt.Println("# Inserting values")
-	var lastInsertId int
-	//var err error
-	err = db.QueryRow("INSERT INTO test(username,departname,created) VALUES($1,$2,$3) returning uid;", "astaxie", "研发部门", "2012-12-09").Scan(&lastInsertId)
-	checkErr(err)
-	fmt.Println("last inserted id =", lastInsertId)
+	if checkRequestMethod(r.Method, "GET") {
+		db, err := openDB()
+		//checkDbConnection(db)
+		if noErr(err) {
+			fmt.Println("# Inserting values..")
+			var lastInsertId int
+			err = db.QueryRow("INSERT INTO test(spalte1 , spalte2, spalte3) VALUES($1,$2,$3) returning ID;",
+				"astaxie", "研发部门", "2012-12-09").Scan(&lastInsertId)
+			if noErr(err) {
+				fmt.Println("# Inserted value =", lastInsertId)
+			}
+			closeDB(db)
+		}
+	}
 }
 
-/*
- func routeTwo (w http.ResponseWriter, r *http.Request) {
- 	fmt.Fprintf(w, "In route Zwei -> gewählte Route: %s", r.URL.Path[1:])
-}
-*/
 
 func main() {
-	dbinfo := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable",
-		DB_USER, DB_PASSWORD, DB_NAME)
-	db, err := sql.Open("postgres", dbinfo)
-	checkErr(err)
-	defer db.Close()
-
-	db.QueryRow("CREATE TABLE test(ID int primary key, spalte1 VARCHAR(30) NOT NULL, spalte2 VARCHAR(30), spalte3 VARCHAR(30));")
-	//checkErr(err)
-
-	// fmt.Println("# Updating")
-	// stmt, err := db.Prepare("update userinfo set username=$1 where uid=$2")
-	// checkErr(err)
-	//
-	// res, err := stmt.Exec("astaxieupdate", lastInsertId)
-	// checkErr(err)
-	//
-	// affect, err := res.RowsAffected()
-	// checkErr(err)
-	//
-	// fmt.Println(affect, "rows changed")
-	//
-	// fmt.Println("# Querying")
-	// rows, err := db.Query("SELECT * FROM userinfo")
-	// checkErr(err)
-	//
-	// for rows.Next() {
-	// 	var uid int
-	// 	var username string
-	// 	var department string
-	// 	var created time.Time
-	// 	err = rows.Scan(&uid, &username, &department, &created)
-	// 	checkErr(err)
-	// 	fmt.Println("uid | username | department | created ")
-	// 	fmt.Printf("%3v | %8v | %6v | %6v\n", uid, username, department, created)
-	// }
-	//
-	// fmt.Println("# Deleting")
-	// stmt, err = db.Prepare("delete from userinfo where uid=$1")
-	// checkErr(err)
-	//
-	// res, err = stmt.Exec(lastInsertId)
-	// checkErr(err)
-	//
-	// affect, err = res.RowsAffected()
-	// checkErr(err)
-	//
-	// fmt.Println(affect, "rows changed")
-
 	http.HandleFunc("/testserver/getAvailableImages", availableImages)
 	http.HandleFunc("/testserver/insertDbEntry", insertDbEntry)
-	// http.HandleFunc("/routeTwo", routeTwo)
+	http.HandleFunc("/testserver/createTable", createTable)
+
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func checkErr(err error) {
+func openDB() (*sql.DB, error) {
+	psqlInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		host, port, user, password, dbname)
+	db, err := sql.Open("postgres", psqlInfo)
+	return db, err
+}
+
+func closeDB(db *sql.DB) {
+	err := db.Close()
 	if err != nil {
-		panic(err)
+		log.Fatalf("cmd.Run() failed with %s\n", err)
+	}
+}
+
+func noErr(err error) bool {
+	if err != nil {
+		fmt.Printf("Failed with %s \n", err)
+		return false
+	} else {
+		return true
+	}
+}
+
+func checkRequestMethod(usedMethod string, method string) bool{
+	if usedMethod == method{
+		return true
+	} else {
+		err := "Wrong request method!"
+		fmt.Printf("Request failed with %s\n", err)
+		return false
 	}
 }
