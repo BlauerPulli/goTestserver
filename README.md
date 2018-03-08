@@ -1,2 +1,2 @@
 # goTestserver
-go testserver 
+Little Testserver written in golang to test some functionalities..
